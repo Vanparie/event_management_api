@@ -1,0 +1,33 @@
+{% extends "events/base.html" %}
+
+{% block title %}{{ event.id|default:"Create" }} Event{% endblock %}
+
+{% block content %}
+<h2>{{ event.id|default:"Create" }} Event</h2>
+<form method="post" action="{% url 'event_form' event.id|default:"" %}">
+    {% csrf_token %}
+    <label for="title">Title:</label>
+    <input type="text" id="title" name="title" value="{{ event.title|default:"" }}" required>
+    
+    <label for="description">Description:</label>
+    <textarea id="description" name="description">{{ event.description|default:"" }}</textarea>
+    
+    <label for="date_time">Date and Time:</label>
+    <input type="datetime-local" id="date_time" name="date_time" value="{{ event.date_time|date:"Y-m-d\TH:i" }}">
+    
+    <label for="location">Location:</label>
+    <input type="text" id="location" name="location" value="{{ event.location|default:"" }}">
+    
+    <label for="category">Category:</label>
+    <select id="category" name="category">
+        {% for key, value in event.CATEGORY_CHOICES %}
+            <option value="{{ key }}" {% if event.category == key %}selected{% endif %}>{{ value }}</option>
+        {% endfor %}
+    </select>
+    
+    <label for="capacity">Capacity:</label>
+    <input type="number" id="capacity" name="capacity" value="{{ event.capacity|default:0 }}" min="0">
+    
+    <button type="submit">Save Event</button>
+</form>
+{% endblock %}

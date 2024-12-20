@@ -1,0 +1,21 @@
+{% extends "events/base.html" %}
+
+{% block title %}{{ event.title }}{% endblock %}
+
+{% block content %}
+<h2>{{ event.title }}</h2>
+<p><strong>Date and Time:</strong> {{ event.date_time }}</p>
+<p><strong>Location:</strong> {{ event.location }}</p>
+<p><strong>Description:</strong> {{ event.description }}</p>
+<p><strong>Capacity:</strong> {{ event.capacity }}</p>
+<p><strong>Registered Users:</strong> {{ event.registered_users.count }}/{{ event.capacity }}</p>
+
+{% if not event.is_past_due %}
+    <form method="post" action="{% url 'event_register' event.id %}">
+        {% csrf_token %}
+        <button type="submit">Register</button>
+    </form>
+{% else %}
+    <p>This event has already passed.</p>
+{% endif %}
+{% endblock %}

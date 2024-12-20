@@ -1,0 +1,20 @@
+{% extends "events/base.html" %}
+
+{% block title %}Profile{% endblock %}
+
+{% block content %}
+<h2>Welcome, {{ user.username }}</h2>
+
+<p>Email: {{ user.email }}</p>
+
+<h3>Your Registered Events</h3>
+<ul>
+    {% for event in user.registered_events.all %}
+        <li>
+            <a href="{% url 'event_detail' event.id %}">{{ event.title }}</a> - {{ event.date_time }}
+        </li>
+    {% empty %}
+        <p>You have not registered for any events.</p>
+    {% endfor %}
+</ul>
+{% endblock %}

@@ -1,0 +1,29 @@
+{% extends "events/base.html" %}
+
+{% block title %}Feedback for {{ event.title }}{% endblock %}
+
+{% block content %}
+<h2>Feedback for {{ event.title }}</h2>
+
+<ul>
+    {% for feedback in feedbacks %}
+        <li>
+            <strong>{{ feedback.user.username }}</strong>: {{ feedback.comment }} ({{ feedback.rating }}/5)
+        </li>
+    {% empty %}
+        <p>No feedback available.</p>
+    {% endfor %}
+</ul>
+
+<h3>Add Your Feedback</h3>
+<form method="post" action="{% url 'add_feedback' event.id %}">
+    {% csrf_token %}
+    <label for="comment">Comment:</label>
+    <textarea id="comment" name="comment" required></textarea>
+    
+    <label for="rating">Rating:</label>
+    <input type="number" id="rating" name="rating" min="1" max="5" required>
+    
+    <button type="submit">Submit Feedback</button>
+</form>
+{% endblock %}
