@@ -1,0 +1,14 @@
+{% extends "base.html" %}
+
+{% block content %}
+<h2>User Registration</h2>
+<form method="post">
+    {% csrf_token %}
+    {{ form.as_p }}
+    <button type="submit">Register</button>
+</form>
+
+{% if event %}
+    <p>You're registering for: <strong>{{ event.title }}</strong></p>
+{% endif %}
+{% endblock %}

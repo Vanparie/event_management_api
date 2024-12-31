@@ -5,6 +5,7 @@
 {% block content %}
 <h2>Feedback for {{ event.title }}</h2>
 
+<!-- Display feedbacks -->
 <ul>
     {% for feedback in feedbacks %}
         <li>
@@ -15,8 +16,9 @@
     {% endfor %}
 </ul>
 
+<!-- Add your own feedback form -->
 <h3>Add Your Feedback</h3>
-<form method="post" action="{% url 'add_feedback' event.id %}">
+<form method="post" action="{% url 'event_feedback' event.id %}">
     {% csrf_token %}
     <label for="comment">Comment:</label>
     <textarea id="comment" name="comment" required></textarea>

@@ -10,12 +10,30 @@
 <p><strong>Capacity:</strong> {{ event.capacity }}</p>
 <p><strong>Registered Users:</strong> {{ event.registered_users.count }}/{{ event.capacity }}</p>
 
-{% if not event.is_past_due %}
-    <form method="post" action="{% url 'event_register' event.id %}">
-        {% csrf_token %}
-        <button type="submit">Register</button>
-    </form>
-{% else %}
-    <p>This event has already passed.</p>
+<!-- Message Section (if any feedback is displayed) -->
+{% if messages %}
+    <div class="messages">
+        {% for message in messages %}
+            <p class="{{ message.tags }}">{{ message }}</p>
+        {% endfor %}
+    </div>
 {% endif %}
+
+<!-- Registration Form and Feedback -->
+{% if user.is_authenticated %}
+    {% if user_registered %}
+        <p>You are already registered for this event.</p>
+    {% elif not is_past_due %}
+        <form method="post" action="{% url 'user_register' event_id=event.id %}">
+            {% csrf_token %}
+            <button type="submit" class="btn-register">Register</button>
+        </form>
+    {% else %}
+        <p>This event has already passed.</p>
+    {% endif %}
+{% else %}
+    <p>Please <a href="{% url 'login' %}">log in</a> to register for this event.</p>
+{% endif %}
+
 {% endblock %}
+

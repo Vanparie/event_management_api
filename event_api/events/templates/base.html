@@ -1,0 +1,59 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{% block title %}Event Management{% endblock %}</title>
+    <link rel="stylesheet" href="{% static 'css/style.css' %}">
+</head>
+<body>
+    <!-- Header Section -->
+    <header>
+        <h1>Event Management System</h1>
+        <nav>
+            <a href="{% url 'event_list' %}">Home</a>
+
+            {% if user.is_authenticated %}
+                <a href="{% url 'profile' %}">Profile</a>
+                
+                <!-- Logout Form -->
+                <form method="post" action="{% url 'logout' %}" style="display:inline;">
+                    {% csrf_token %}
+                    <button type="submit" style="background:none; border:none; color:blue; cursor:pointer; text-decoration:underline;">
+                        Logout
+                    </button>
+                </form>
+
+                {% if event %}
+                    <a href="{% url 'user_register' event_id=event.id %}">Register</a>
+                {% endif %}
+            {% else %}
+                <a href="{% url 'login' %}">Login</a>
+                <a href="{% url 'signup' %}">Sign Up</a>
+            {% endif %}
+        </nav>
+    </header>
+
+    <!-- Messages Section -->
+    {% if messages %}
+    <div class="messages">
+        {% for message in messages %}
+        <div class="message {{ message.tags }}">
+            {{ message }}
+        </div>
+        {% endfor %}
+    </div>
+    {% endif %}
+
+    <!-- Main Content -->
+    <main>
+        {% block content %}{% endblock %}
+    </main>
+
+    <!-- Footer Section -->
+    <footer>
+        <p>&copy; 2025 Event Management System</p>
+    </footer>
+</body>
+</html>

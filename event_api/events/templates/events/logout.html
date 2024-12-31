@@ -1,0 +1,16 @@
+{% extends "events/base.html" %}
+
+{% block title %}Logout{% endblock %}
+
+{% block content %}
+<div class="logout-container">
+    <h2>Are you sure you want to log out?</h2>
+    <form method="post" action="{% url 'logout' %}">
+    {% csrf_token %}
+    <button type="submit">Logout</button>
+</form>
+
+    <a href="{% url 'event_list' %}" class="cancel-button">Cancel</a>
+    <a href="{% url 'logout' %}">Logout</a>
+</div>
+{% endblock %}

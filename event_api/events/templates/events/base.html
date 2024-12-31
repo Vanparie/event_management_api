@@ -1,3 +1,5 @@
+{% load static %}
+
 <!DOCTYPE html>
 <html lang="en">
 <head>
@@ -14,9 +16,21 @@
             <a href="{% url 'admin:index' %}">Admin</a>
         </nav>
     </header>
+
+    <div class="messages">
+        {% if messages %}
+            <ul>
+                {% for message in messages %}
+                    <li class="{{ message.tags }}">{{ message }}</li>
+                {% endfor %}
+            </ul>
+        {% endif %}
+    </div>
+
     <main>
         {% block content %}{% endblock %}
     </main>
+
     <footer>
         <p>&copy; 2025 Event Management</p>
     </footer>

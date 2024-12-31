@@ -1,247 +1,241 @@
-from django.shortcuts import render
-
-from rest_framework import viewsets, permissions, generics
-from .models import Event, EventFeedback, RecurringEvent, Notification
-from .serializers import EventSerializer
-from django.utils import timezone
-from rest_framework import filters
-from rest_framework.filters import SearchFilter
-
-from rest_framework.views import APIView
-from rest_framework.response import Response
-from rest_framework.permissions import IsAuthenticated
-from rest_framework import status
-from .serializers import EventRegistrationSerializer, EventFeedbackSerializer, RecurringEventSerializer, NotificationSerializer
-
-from rest_framework.generics import ListAPIView
-from django_filters.rest_framework import DjangoFilterBackend
-
-import icalendar
-from django.http import HttpResponse
-
-from django.views.generic import ListView, DetailView
-from django.shortcuts import render, get_object_or_404
-
-from django.shortcuts import render, redirect
-from django.contrib.auth.forms import UserCreationForm, AuthenticationForm
+from django.shortcuts import render, get_object_or_404, redirect
+from django.contrib.auth.models import User
 from django.contrib.auth import login, logout
 from django.contrib import messages
-from django.contrib.auth.views import LoginView
+from django.utils import timezone
+from django.urls import reverse_lazy
+from django.views.generic.edit import CreateView
 from django.contrib.auth.decorators import login_required
-from .forms import EventFeedbackForm, EventForm
+from django.contrib.auth.forms import UserCreationForm
+from rest_framework import viewsets, status
+from rest_framework.response import Response
+from rest_framework.decorators import action
+
+from .models import Event, Registration, Feedback
+from .forms import UserRegistrationForm, EventFeedbackForm
+from .serializers import EventSerializer, RegistrationSerializer
 
 
+# DRF ViewSet for Event
 class EventViewSet(viewsets.ModelViewSet):
     queryset = Event.objects.all()
     serializer_class = EventSerializer
-    permission_classes = [permissions.IsAuthenticated]   # Only authenticated users can perform actions
-    filter_backends = (filters.SearchFilter,)
-    search_fields = ['title', 'location']
 
-    def perform_create(self, serializer):
-        # Ensure that the organizer is the current authenticated user
-        serializer.save(organizer=self.request.user)
+    @action(detail=True, methods=['post'], url_path='register')
+    def register_user(self, request, pk=None):
+        """Custom action to register a user for an event via API."""
+        event = get_object_or_404(Event, pk=pk)
+        serializer = RegistrationSerializer(data=request.data)
 
-    def update(self, request, *args, **kwargs):
-        # Ensure the user can only edit their own events
-        event = self.get_object()
-        if event.organizer != request.user:
-            return Response({'detail': 'You cannot edit this event.'}, status=status.HTTP_403_FORBIDDEN)
-        return super().update(request, *args, **kwargs)
-    
-    def get_queryset(self):
-        # ensures only future/upcoming events are shown
-        return Event.objects.filter(date_time__gte=timezone.now())
+        if serializer.is_valid():
+            username = serializer.validated_data['username']
+            email = serializer.validated_data['email']
+            password = serializer.validated_data['password']
+            password2 = serializer.validated_data['password2']
 
+            if password != password2:
+                return Response({"error": "Passwords do not match."}, status=status.HTTP_400_BAD_REQUEST)
 
-# endpoint for event registration
-class RegisterForEventView(APIView):
-    permission_classes = [IsAuthenticated]
+            if User.objects.filter(username=username).exists():
+                return Response({"error": "Username already exists."}, status=status.HTTP_400_BAD_REQUEST)
 
-    def post(self, request, event_id):
-        try:
-            event = Event.objects.get(id=event_id)
-        except Event.DoesNotExist:
-            return Response({"error": "Event not found."}, status=status.HTTP_404_NOT_FOUND)
+            user = User.objects.create_user(username=username, email=email, password=password)
 
-        if event.is_full():
-            return Response({"error": "This event is fully booked."}, status=status.HTTP_400_BAD_REQUEST)
+            if event.is_full():
+                return Response({"error": "Event is at full capacity."}, status=status.HTTP_400_BAD_REQUEST)
 
-        event.registered_users.add(request.user)
-        serializer = EventRegistrationSerializer(event)
-        return Response(serializer.data, status=status.HTTP_200_OK)    
+            event.registered_users.add(user)
+            event.save()
+            return Response({"success": f"User '{username}' registered successfully for '{event.title}'."},
+                            status=status.HTTP_201_CREATED)
 
-
-# Allow filtering by category
-class EventListView(ListAPIView):
-    queryset = Event.objects.all()
-    serializer_class = EventSerializer
-    filter_backends = [DjangoFilterBackend]
-    filterset_fields = ['category']
-
-
-# Generate calendar URLs
-def generate_icalendar(request, event_id):
-    event = Event.objects.get(id=event_id)
-    cal = icalendar.Calendar()
-    event_item = icalendar.Event()
-    event_item.add('summary', event.title)
-    event_item.add('dtstart', event.date_time)
-    event_item.add('location', event.location)
-    cal.add_component(event_item)
-
-    response = HttpResponse(cal.to_ical(), content_type='text/calendar')
-    response['Content-Disposition'] = f'attachment; filename="{event.title}.ics"'
-    return response    
-
-
-class EventDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Event.objects.all()  # Queryset to retrieve the event data
-    serializer_class = EventSerializer  # Serializer class to format the event data
-    lookup_field = 'pk'  # This will use the primary key (pk) in the URL to identify the event
-
-
-class EventCreateView(generics.CreateAPIView):
-    queryset = Event.objects.all()
-    serializer_class = EventSerializer
-
-
-class EventSearchView(generics.ListAPIView):
-    queryset = Event.objects.all()
-    serializer_class = EventSerializer
-    filter_backends = (DjangoFilterBackend, SearchFilter)
-    search_fields = ['title', 'description', 'category']        
-
-
-class EventFeedbackListView(generics.ListCreateAPIView):
-    serializer_class = EventFeedbackSerializer
-
-    def get_queryset(self):
-        """
-        This view returns a list of feedback for a specific event.
-        """
-        event_id = self.kwargs['event_id']
-        return EventFeedback.objects.filter(event_id=event_id)  # Filter feedback by event      
-    
-
-class RecurringEventView(generics.CreateAPIView):
-    queryset = RecurringEvent.objects.all()
-    serializer_class = RecurringEventSerializer  
-
-class RecurringEventListView(generics.ListCreateAPIView):
-    queryset = RecurringEvent.objects.all()
-    serializer_class = RecurringEventSerializer
-
-class RecurringEventDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = RecurringEvent.objects.all()
-    serializer_class = RecurringEventSerializer      
-
-
-class NotificationListView(generics.ListCreateAPIView):
-    queryset = Notification.objects.all()
-    serializer_class = NotificationSerializer
-
-class NotificationDetailView(generics.RetrieveUpdateDestroyAPIView):
-    queryset = Notification.objects.all()
-    serializer_class = NotificationSerializer    
-
-
-class CalendarIntegrationView(APIView):
-    def get(self, request, *args, **kwargs):
-        # Example: Return events to add to a calendar
-        events = Event.objects.all()
-        event_data = [{"title": event.title, "date": event.date} for event in events]
-        return Response(event_data)    
-    
-
-def root_view(request):
-    return HttpResponse("Welcome to the Event Management API!") 
+        return Response(serializer.errors, status=status.HTTP_400_BAD_REQUEST)
 
 
 # Function-Based Views
 def event_list(request):
-    events = Event.objects.all()
+    """List all upcoming events."""
+    events = Event.objects.filter(date_time__gte=timezone.now()).order_by('date_time')
     return render(request, 'events/event_list.html', {'events': events})
 
+
+@login_required
 def event_detail(request, pk):
+    """View details of a specific event."""
     event = get_object_or_404(Event, pk=pk)
-    return render(request, 'events/event_detail.html', {'event': event})
+    user_registered = event.registrations.filter(user=request.user).exists()
+    is_past_due = event.is_past_due()
+
+    if request.method == 'POST':
+        feedback_form = EventFeedbackForm(request.POST)
+        if feedback_form.is_valid():
+            feedback = feedback_form.save(commit=False)
+            feedback.event = event
+            feedback.user = request.user
+            feedback.save()
+            messages.success(request, "Your feedback has been submitted.")
+            return redirect('event_detail', pk=pk)
+    else:
+        feedback_form = EventFeedbackForm()
+
+    return render(request, 'events/event_detail.html', {
+        'event': event,
+        'feedback_form': feedback_form,
+        'user_registered': user_registered,
+        'is_past_due': is_past_due,
+    })
 
 
-# View for user registration
-def register(request):
+def event_register(request, event_id):
+    """Register a user for an event."""
+    event = get_object_or_404(Event, id=event_id)
+
+    if request.method == 'POST':
+        username = request.POST.get('username')
+        email = request.POST.get('email')
+        password = request.POST.get('password')
+        password2 = request.POST.get('password2')
+
+        if password != password2:
+            messages.error(request, "Passwords do not match.")
+            return render(request, 'events/event_register.html', {'event_id': event_id})
+
+        user = User.objects.create_user(username=username, email=email, password=password)
+
+        Registration.objects.create(user=user, event=event)
+
+        messages.success(request, "You have successfully registered for the event.")
+        return redirect('event_detail', pk=event.id)
+
+    return render(request, 'events/event_register.html', {'event_id': event_id})
+
+
+def user_register(request, event_id):
+    """User registration and event registration."""
+    event = get_object_or_404(Event, pk=event_id)
+
+    if request.method == 'POST':
+        form = UserRegistrationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            event.registered_users.add(user)
+            messages.success(request, "You have successfully registered for the event!")
+            return redirect('event_detail', pk=event.pk)
+        else:
+            messages.error(request, "Registration failed. Please check your details and try again.")
+    else:
+        form = UserRegistrationForm()
+
+    return render(request, 'events/user_register.html', {'form': form, 'event': event})
+
+
+def register(request, event_id):
+    """User signup and event registration."""
+    if request.method == 'POST':
+        form = UserRegistrationForm(request.POST)
+        if form.is_valid():
+            user = form.save()
+            login(request, user)
+            return redirect('user_register', event_id=event_id)
+    else:
+        form = UserRegistrationForm()
+
+    return render(request, 'events/register.html', {'form': form, 'event_id': event_id})
+
+
+def signup(request):
+    """Handle user sign-up."""
     if request.method == 'POST':
         form = UserCreationForm(request.POST)
         if form.is_valid():
             form.save()
-            messages.success(request, 'Your account has been created! You can now log in.')
-            return redirect('login')  # Redirect to the login page after successful registration
+            messages.success(request, "Your account has been created successfully. Please log in.")
+            return redirect('login')
     else:
         form = UserCreationForm()
-    
-    return render(request, 'events/register.html', {'form': form})
+    return render(request, 'registration/signup.html', {'form': form})
 
 
-# View for user login
-def login_view(request):
-    if request.method == 'POST':
-        form = AuthenticationForm(request, data=request.POST)
-        if form.is_valid():
-            user = form.get_user()
-            login(request, user)
-            return redirect('event_list')  # Redirect to event list after login
-    else:
-        form = AuthenticationForm()
-    return render(request, 'events/login.html', {'form': form})
-
-
-# View for user logout
-@login_required
 def logout_view(request):
-    logout(request)
-    return redirect('login')  # Redirect to login after logout
+    """Log the user out."""
+    if request.method == 'POST':
+        logout(request)
+        messages.success(request, "You have successfully logged out.")
+        return redirect('event_list')
+    return render(request, 'events/logout.html')
 
 
-# profile view
-def profile(request):
-    return render(request, 'profile.html')  # Create a template for displaying user profile
+# Generic Views
+class EventCreateView(CreateView):
+    """Create a new event."""
+    model = Event
+    fields = ['title', 'description', 'date_time', 'location', 'capacity']
+    template_name = 'events/event_form.html'
+    success_url = reverse_lazy('event_list')
 
 
-# event feedback view
-@login_required
-def event_feedback(request, pk):
+def event_form(request, pk):
+    """Edit an event."""
     event = get_object_or_404(Event, pk=pk)
-
     if request.method == 'POST':
-        form = EventFeedbackForm(request.POST)
-        if form.is_valid():
-            feedback = form.save(commit=False)
-            feedback.event = event
-            feedback.user = request.user
-            feedback.save()
-            return redirect('event_list')  # Redirect back to event list or event details page
-    else:
-        form = EventFeedbackForm()
+         # Extract data from the form submission
+        title = request.POST.get('title')
+        description = request.POST.get('description')
+        date_time = request.POST.get('date_time')
+        location = request.POST.get('location')
+        category = request.POST.get('category')
+        capacity = request.POST.get('capacity')
 
-    return render(request, 'events/event_feedback.html', {'form': form, 'event': event})
+        if event:  # Editing an existing event
+            event.title = title
+            event.description = description
+            event.date_time = date_time
+            event.location = location
+            event.category = category
+            event.capacity = capacity
+            event.save()
+            messages.success(request, 'Event updated successfully!')
+        else:  # Creating a new event
+            event = Event.objects.create(
+                title=title,
+                description=description,
+                date_time=date_time,
+                location=location,
+                category=category,
+                capacity=capacity,
+            )
+            messages.success(request, 'Event created successfully!')
+
+        return redirect('event_list')  # Redirect to the event list page
+
+    # Render the form template with the existing event data or a blank form
+    return render(request, 'events/eventform.html', {'event': event})
 
 
+def profile(request):
+    """User profile page."""
+    return render(request, 'events/profile.html')
 
-# Event Form View
 
-@login_required
-def event_form(request, pk=None):
-    if pk:      # If pk is provided, we are editing an existing event
-        event = get_object_or_404(Event, pk=pk)
-    else:       # Otherwise, we are creating a new event
-        event = None
-    
-    if request.method == 'POST':
-        form = EventForm(request.POST, instance=event)
-        if form.is_valid():
-            form.save()
-            return redirect('event_list')  # Redirect after event creation/editing
-    else:
-        form = EventForm(instance=event)
-    
-    return render(request, 'events/event_form.html', {'form': form, 'event': event})
+def event_feedback(request, event_id):
+    event = get_object_or_404(Event, id=event_id)
+    feedbacks = event.feedbacks.all()  # Get all feedbacks for the event
+
+    # Handle the feedback submission
+    if request.method == "POST":
+        comment = request.POST.get("comment")
+        rating = request.POST.get("rating")
+
+        # Create feedback entry
+        Feedback.objects.create(
+            event=event,
+            user=request.user,
+            comment=comment,
+            rating=rating,
+        )
+        return redirect('event_feedback', event_id=event.id)
+
+    return render(request, 'events/event_feedback.html', {
+        'event': event,
+        'feedbacks': feedbacks
+    })
